@@ -29,7 +29,7 @@ colleccion_actual=[]
 collecciones_planificador=[]
 planificador_actual=[]
 
-json_file_path = os.path.normpath("danilo_planner\\collecciones.json")
+json_file_path = os.path.normpath(f"danilo_planner\\{collecciones}.json")
 
 def cargar_json(ruta):
     if os.path.exists(ruta):

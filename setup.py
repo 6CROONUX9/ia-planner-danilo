@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name='ia-planner-jerson',
-    version='0.1.3',
+    version='0.1.4',
     packages=['danilo_planner'],
     description='Planificador de tareas con IA implementando diferentes modelos',
     author='Jerson Danilo Florez Parra',
