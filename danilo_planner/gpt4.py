@@ -79,8 +79,8 @@ def mostrar_lista_planificadores(collecciones):
         return
     
     print("Lista de colecciones de planificadores:")
-    for i, coleccion in enumerate(collecciones, start=1):
-        print(f"{i}. {coleccion}")
+    for i in range (len(collecciones)):
+        print(f"{i+1}. {collecciones[i]}")
 
 def actualizar_planificador(result):
     """
