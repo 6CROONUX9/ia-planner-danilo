@@ -48,10 +48,14 @@ def agregar_coleccion(nombre_coleccion):
     guardar_json(json_file_path, data)
     print(f"Colección '{nombre_coleccion}' agregada exitosamente.")
 
+#####################################################################
+# CORREGIR ESTA COSA SOLO CARGA EL COLECCIONES
 def cargar_colecciones_en_vector():
     data = cargar_json(json_file_path)
     datos=data.get("colecciones", [])
-    collecciones_planificador.append(datos)
+    for item in datos:
+        collecciones_planificador.append(item)
+#####################################################################
 
 def leer_plan(texto_indicacion_leer_planificador):
     """
