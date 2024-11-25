@@ -1,7 +1,8 @@
 import os
 from langchain.vectorstores import Chroma
 from langchain.agents import Tool
-from langchain import PromptTemplate, LLMChain
+from langchain import LLMChain
+from langchain_core.prompts import PromptTemplate
 import re
 from langchain.tools import Tool, tool
 from langchain.document_loaders import DirectoryLoader
@@ -13,7 +14,7 @@ from langchain_community.embeddings import HuggingFaceInferenceAPIEmbeddings
 from langchain_openai import ChatOpenAI
 from langchain.memory import ConversationBufferMemory
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from danilo_planner.midirectorio import MiClase
+from midirectorio import MiClase
 import json
 
 global collecciones
@@ -48,14 +49,11 @@ def agregar_coleccion(nombre_coleccion):
     guardar_json(json_file_path, data)
     print(f"Colección '{nombre_coleccion}' agregada exitosamente.")
 
-#####################################################################
-# CORREGIR ESTA COSA SOLO CARGA EL COLECCIONES
 def cargar_colecciones_en_vector():
     data = cargar_json(json_file_path)
     datos=data.get("colecciones", [])
     for item in datos:
         collecciones_planificador.append(item)
-#####################################################################
 
 def leer_plan(texto_indicacion_leer_planificador):
     """
@@ -64,6 +62,16 @@ def leer_plan(texto_indicacion_leer_planificador):
         retorno: El formato adecuado de documentos para crear el repositorio de planificacion
     """
     loader = DirectoryLoader("danilo_planner", glob=f"**\\{colleccion_actual[0]}.txt", loader_cls=TextLoader)
+    documents = loader.load()
+    return documents
+
+def leer_planinificador(texto_indicacion_leer_planificador):
+    """
+        parametros: texto con la indicación del usuario para leer el plan
+        procesamiento: se lee el plan dado un texto con la indicación
+        retorno: El formato adecuado de documentos para crear el repositorio de planificacion
+    """
+    loader = DirectoryLoader("danilo_planner", glob=f"**\\{planificador_actual[0]}.txt", loader_cls=TextLoader)
     documents = loader.load()
     return documents
 
@@ -86,66 +94,6 @@ def mostrar_lista_planificadores(collecciones):
     for i in range (len(collecciones)):
         print(f"{i+1}. {collecciones[i]}")
 
-def actualizar_planificador(result):
-    """
-        parametros: texto con la indicación de actualizar el planificador
-        procesamiento: actualiza el planificador
-        salida: actualización exitosa
-    """
-    nombre=planificador_actual[0]
-    persist_directory = os.path.normpath(f"danilo_planner\\{nombre}")
-    Chroma_DB = Chroma(
-        persist_directory=persist_directory, 
-        embedding_function=agent.embeddings
-    ).as_retriever(search_kwargs=dict(k=1))
-    
-    docs = Chroma_DB.get_relevant_documents("planificación")
-    planificacion_actual = "\n\n".join(str(page.page_content) for page in docs)
-    conversacion = result
-    if not conversacion:
-        return "No hay conversación previa"
-    prompt_template = f"""
-    Al siguiente documento de planificación en lenguaje PDDL:
-
-        {planificacion_actual}
-        
-    extrae e incorpora los planes de mejora de la siguiente conversación sin modificar los planes dados inicialmente:
-
-        {conversacion}
-
-    y siendo estricto en no cambiar la lógica inicial del código PDDL retorna solo el código con las incorporaciones.
-    """
-    
-    multi_input_prompt = PromptTemplate(
-                input_variables=["planificacion_actual", "conversacion"], 
-                template=prompt_template
-            )
-    llm = ChatOpenAI(temperature=0, model="gpt-4o-mini", api_key= api_key)
-    llm_chain = LLMChain(prompt=multi_input_prompt, llm=llm)
-    
-    result = llm_chain.run({"planificacion_actual": planificacion_actual, "conversacion": conversacion})
-    pattern = re.compile(r'\(define\s+(.*?)\n\)', re.DOTALL)
-    match = pattern.search(result)
-    codigo_pddl = match.group(0).strip() if match else result
-    
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
-    texts = text_splitter.split_text(codigo_pddl)
-    
-    Chroma_DB = Chroma(persist_directory=persist_directory, embedding_function=agent.embeddings)
-    ids_to_delete = Chroma_DB.get()["ids"]
-    for id in ids_to_delete:
-        Chroma_DB.delete([id])
-        
-    Chroma_DB = Chroma.from_texts(texts, agent.embeddings, persist_directory=persist_directory)
-    Chroma_DB.persist()
-    ruta=MiClase.select_directory()
-    with open(ruta+f"\\{nombre}.txt", "w", encoding="utf-8") as archivo:
-        archivo.write(result)
-    
-    agent.memory.chat_memory.clear()
-            
-    return f"El planificador fue actualizado exitosamente."
-
 
 @tool
 def lista_mejoras_explicitas(lista_mejoras):
@@ -154,15 +102,9 @@ def lista_mejoras_explicitas(lista_mejoras):
         procesamiento: se actualiza el planificador con las mejoras explicitas
         retorno: actualización exitosa del planificador
     """
-    nombre=planificador_actual[0]
     conversacion=lista_mejoras
-    persist_directory = os.path.normpath(f"danilo_planner\\{nombre}")
-    Chroma_DB = Chroma(
-        persist_directory=persist_directory, 
-        embedding_function=agent.embeddings
-    ).as_retriever(search_kwargs=dict(k=1))            
-    docs = Chroma_DB.get_relevant_documents("planificación")
-    planificacion_actual = "\n\n".join(str(page.page_content) for page in docs)
+    docs=leer_planinificador("Leer planificador")
+    planificacion_actual = format_docs(docs)
     llm = ChatOpenAI(temperature=0, model="gpt-4o-mini", api_key= api_key)
     prompt_template = f"""
     La planificación actual es la siguiente:
@@ -221,7 +163,7 @@ def crear_plan(especificaciones):
             patron = r"```(.*?)```"
             resultados = re.findall(patron, total, re.DOTALL)
             contenido_dentro_triples_comillas = '\n'.join(resultados) if resultados else total.strip()
-            contenido_sin_pddl = re.sub(r'\bpddl\b', '', contenido_dentro_triples_comillas, flags=re.IGNORECASE)
+            contenido_sin_pddl = re.sub(r'\blisp\b', '', contenido_dentro_triples_comillas, flags=re.IGNORECASE)
                 
             directorio = os.path.dirname(persist_directory_plan)
             if not os.path.exists(directorio):
@@ -241,6 +183,14 @@ def crear_plan(especificaciones):
             return str(e) 
 
 
+from langchain_core.output_parsers import StrOutputParser
+from langchain.schema.runnable import RunnablePassthrough
+
+
+def format_docs(docs1):
+    loader = DirectoryLoader("danilo_planner", glob=f"**\\{planificador_actual[0]}.txt", loader_cls=TextLoader)
+    docs1=loader.load()
+    return "\n\n".join(str(page.page_content) for page in docs1)
     
 @tool        
 def crear_planificador(texto_indicacion_crear_repositorio):
@@ -258,22 +208,19 @@ def crear_planificador(texto_indicacion_crear_repositorio):
     if docs:
         return "El repositorio existe"
         
-    
-    documents = leer_plan("leer planificación")
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
-    docs = text_splitter.split_documents(documents)
-    content = "\n\n".join(str(page.page_content) for page in docs)
-    texts = text_splitter.split_text(content)
-    
-    Chroma_DB = Chroma.from_texts(texts, agent.embeddings, persist_directory=persist_directory)
-    Chroma_DB.persist()
-    return "El repositorio ha sido creado con el plan existente."
+    docs = leer_plan("leer plan")
+
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=350, chunk_overlap=0)
+    splits = text_splitter.split_documents(docs)
+    Chroma.from_documents(documents=splits, embedding=agent.embeddings,persist_directory=persist_directory)
+    return "planificador creado con éxito"
+
 
 @tool
-def consultar_planificador(texto_indicacion_consultar_repositorio):
+def consultar_planificador(prompt):
     """
-        parametros: texto con la indicación de consultar en el planificador por parte del usuario
-        procesamiento: herramienta usada para consultar solo cuando se indique por parte del usuario
+        parametros: prompt donde el usuario requiere consultar y retornar el contenido del planificador
+        procesamiento: herramienta usada para consultar recibiendo el prompt de parte del usuario
         retorno: consulta realizada
     """
     nombre=planificador_actual[0]
@@ -281,28 +228,88 @@ def consultar_planificador(texto_indicacion_consultar_repositorio):
     Chroma_DB = Chroma(
         persist_directory=persist_directory, 
         embedding_function=agent.embeddings
-    ).as_retriever(search_kwargs=dict(k=1))
+    )
     
-    docs = Chroma_DB.get_relevant_documents("planificación")
-    planificacion_actual = "\n\n".join(str(page.page_content) for page in docs)
+    retriever = Chroma_DB.as_retriever()
+    llm = ChatOpenAI(temperature=0, model="gpt-4o-mini", api_key= api_key)
+    template = """
+            Responda la pregunta según el contexto proporcionado.
+        \n\n
+        contexto:\n {context}?\n
+        pregunta: \n{question}\n
+        Respuesta:
+        """
+    custom_rag_prompt = PromptTemplate.from_template(template)
+    rag_chain = (
+    {"context": retriever | format_docs, "question": RunnablePassthrough()}
+    | custom_rag_prompt
+    | llm
+    | StrOutputParser()
+    )
+    return rag_chain.invoke(prompt) 
+
+var_control=[0]
+auxiliar=[0]
+
+def actualizar_planificador(result):
+    """
+        parametros: texto con la indicación de actualizar el planificador
+        procesamiento: actualiza el planificador
+        salida: actualización exitosa
+    """
+    nombre=planificador_actual[0]
+    persist_directory = os.path.normpath(f"danilo_planner\\{nombre}")
+    persist_directory_plan = os.path.normpath(f"danilo_planner\\{nombre}.txt")
+    docs=leer_planinificador("Leer planificador")
+    planificacion_actual = format_docs(docs)
+    conversacion = result
+    if not conversacion:
+        return "No hay conversación previa"
     prompt_template = f"""
-            La planificación actual es la siguiente:
-            {planificacion_actual}
-            La pregunta es la siguiente:
-            {texto_indicacion_consultar_repositorio}
-            Devuelve de manera estricta la indicación solicitada hacía el planificador
-            """
+    Al siguiente documento de planificación en lenguaje PDDL:
+
+        {planificacion_actual}
+        
+    extrae e incorpora los planes de mejora de la siguiente conversación sin modificar los planes dados inicialmente:
+
+        {conversacion}
+
+    y siendo estricto en no cambiar la lógica inicial del código PDDL retorna solo el código con las incorporaciones.
+    """
+    
     multi_input_prompt = PromptTemplate(
-                input_variables=["planificacion_actual", "texto_indicacion_consultar_repositorio"], 
+                input_variables=["planificacion_actual", "conversacion"], 
                 template=prompt_template
             )
     llm = ChatOpenAI(temperature=0, model="gpt-4o-mini", api_key= api_key)
     llm_chain = LLMChain(prompt=multi_input_prompt, llm=llm)
-    result = llm_chain.run({"planificacion_actual": planificacion_actual, "pregunta":texto_indicacion_consultar_repositorio})
-    return result
+    
+    result = llm_chain.run({"planificacion_actual": planificacion_actual, "conversacion": conversacion})
+    patron = r"```(.*?)```"
+    resultados = re.findall(patron, result, re.DOTALL)
+    contenido_dentro_triples_comillas = '\n'.join(resultados) if resultados else result.strip()
+    contenido_sin_pddl = re.sub(r'\bpddl\b', '', contenido_dentro_triples_comillas, flags=re.IGNORECASE)
+    
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=350, chunk_overlap=0)
+    splits = text_splitter.split_documents(docs)
+    
+    Chroma_DB = Chroma(persist_directory=persist_directory, embedding_function=agent.embeddings)
+    ids_to_delete = Chroma_DB.get()["ids"]
+    for id in ids_to_delete:
+        Chroma_DB.delete([id])
+        
+    Chroma.from_documents(documents=splits, embedding=agent.embeddings,persist_directory=persist_directory)
+    ruta=MiClase.select_directory()
+    with open(ruta+f"\\{nombre}.txt", "w", encoding="utf-8") as archivo:
+        archivo.write(contenido_sin_pddl)
 
-var_control=[0]
-auxiliar=[0]
+    with open(persist_directory_plan, 'w', encoding='utf-8') as archivo:
+        archivo.write(contenido_sin_pddl)
+    
+    agent.memory.chat_memory.clear()
+            
+    return f"El planificador fue actualizado exitosamente."
+
 @tool
 def sugerir_o_implementar_planes_de_mejora(texto_indicacion_sugerir_mejora):
         """
@@ -314,19 +321,12 @@ def sugerir_o_implementar_planes_de_mejora(texto_indicacion_sugerir_mejora):
             input_memory.clear()
             var_control[0]=1
         if(len(input_memory)==0):
-            nombre=planificador_actual[0]
-            persist_directory = os.path.normpath(f"danilo_planner\\{nombre}")
-            Chroma_DB = Chroma(
-                persist_directory=persist_directory, 
-                embedding_function=agent.embeddings
-            ).as_retriever(search_kwargs=dict(k=1))
-            
-            docs = Chroma_DB.get_relevant_documents("planificación")
-            planificacion_actual = "\n\n".join(str(page.page_content) for page in docs)
+            docs=leer_planinificador("Leer planificador")
+            planificacion_actual = format_docs(docs)
             prompt_template = f"""
             La planificación actual es la siguiente:
             {planificacion_actual}
-            sugiere planes de mejora.
+            sugiere planes de mejora sin alterar la lógica actual del planificador y retorna solo los planes listados y sin incluir código PDDl a dichos planes.
             """
             multi_input_prompt = PromptTemplate(
                     input= planificacion_actual,
@@ -338,23 +338,16 @@ def sugerir_o_implementar_planes_de_mejora(texto_indicacion_sugerir_mejora):
             return result
         else:
             if(auxiliar[0]==1):
-                nombre=planificador_actual[0]
                 conversacion=input_memory[0]
-                persist_directory = os.path.normpath(f"danilo_planner\\{nombre}")
-                Chroma_DB = Chroma(
-                    persist_directory=persist_directory, 
-                    embedding_function=agent.embeddings
-                ).as_retriever(search_kwargs=dict(k=1))            
-                docs = Chroma_DB.get_relevant_documents("planificación")
-                planificacion_actual = "\n\n".join(str(page.page_content) for page in docs)
+                docs=leer_planinificador("Leer planificador")
+                planificacion_actual = format_docs(docs)
                 llm = ChatOpenAI(temperature=0, model="gpt-4o-mini", api_key= api_key)
                 prompt_template = f"""
                 La planificación actual es la siguiente:
                 {planificacion_actual}
                 y la conversación es la siguiente:
                 {conversacion}
-                extrae de manera estricta las acciones de mejora de la conversación y aplicalas en código PDDL a la planificación actual.
-                solo devuelve la planificación en PDDL con las acciones de mejora.
+                extrae de manera estricta las acciones de mejora de la conversación y aplicalas en código PDDL a la planificación actual sin alterar la lógica actual del planificador.
                 """
                 multi_input_prompt = PromptTemplate(
                         input_variables=["planificacion_actual", "conversacion"], 
@@ -394,7 +387,7 @@ class PlanificadorAgent:
             Tool(
                 name='consultar_planificador',
                 func=consultar_planificador,
-                description="herramienta usada para consultar solo cuando se indique por parte del usuario"
+                description="herramienta usada para consultar recibiendo el prompt de parte del usuario"
             ),
             Tool(
                 name='sugerir_o_implementar_planes_de_mejora',
