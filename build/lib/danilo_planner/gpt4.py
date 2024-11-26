@@ -1,4 +1,5 @@
 import os
+import warnings
 from langchain.vectorstores import Chroma
 from langchain.agents import Tool
 from langchain import LLMChain
@@ -16,6 +17,8 @@ from langchain.memory import ConversationBufferMemory
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from danilo_planner.midirectorio import MiClase
 import json
+
+warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 global collecciones
 global collecciones_planificador
@@ -49,11 +52,14 @@ def agregar_coleccion(nombre_coleccion):
     guardar_json(json_file_path, data)
     print(f"Colección '{nombre_coleccion}' agregada exitosamente.")
 
+#####################################################################
+# CORREGIR ESTA COSA SOLO CARGA EL COLECCIONES
 def cargar_colecciones_en_vector():
     data = cargar_json(json_file_path)
     datos=data.get("colecciones", [])
     for item in datos:
         collecciones_planificador.append(item)
+#####################################################################
 
 def leer_plan(texto_indicacion_leer_planificador):
     """
