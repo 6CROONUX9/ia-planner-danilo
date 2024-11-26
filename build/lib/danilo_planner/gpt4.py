@@ -14,7 +14,7 @@ from langchain_community.embeddings import HuggingFaceInferenceAPIEmbeddings
 from langchain_openai import ChatOpenAI
 from langchain.memory import ConversationBufferMemory
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from midirectorio import MiClase
+from danilo_planner.midirectorio import MiClase
 import json
 import warnings
 
