@@ -1,12 +1,11 @@
 import os
-import warnings
-from langchain.vectorstores import Chroma
+from langchain_community.vectorstores.chroma import Chroma
 from langchain.agents import Tool
-from langchain import LLMChain
+from langchain.chains import LLMChain
 from langchain_core.prompts import PromptTemplate
 import re
 from langchain.tools import Tool, tool
-from langchain.document_loaders import DirectoryLoader
+from langchain_community.document_loaders import DirectoryLoader
 from langchain_community.document_loaders import TextLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.agents import initialize_agent 
@@ -15,8 +14,9 @@ from langchain_community.embeddings import HuggingFaceInferenceAPIEmbeddings
 from langchain_openai import ChatOpenAI
 from langchain.memory import ConversationBufferMemory
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from danilo_planner.midirectorio import MiClase
+from midirectorio import MiClase
 import json
+import warnings
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
